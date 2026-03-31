@@ -3,6 +3,7 @@ cmake_minimum_required(VERSION 3.14)
 project(Obfuscate)
 
 option(GENERATE_TESTS "GENERATE_TESTS" ON)
+option(GENERATE_DEMO "GENERATE_DEMO" ON)
 
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -10,6 +11,20 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # Set unix platforms to output executables to Release and Debug folders (Windows does by default)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE ${CMAKE_BINARY_DIR}/Release)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG ${CMAKE_BINARY_DIR}/Debug)
+
+if (GENERATE_DEMO)
+    find_package(Threads REQUIRED)
+
+    add_executable(demo obfuscate.h demo.cpp)
+    target_link_libraries(demo PRIVATE Threads::Threads)
+
+    add_executable(demo_freestanding obfuscate.h demo.cpp)
+    target_link_libraries(demo_freestanding PRIVATE Threads::Threads)
+    target_compile_definitions(demo_freestanding PRIVATE AY_OBFUSCATE_FREESTANDING=1)
+    if (MSVC)
+        target_compile_options(demo_freestanding PRIVATE /Zc:threadSafeInit-)
+    endif()
+endif()
 
 # Unit tests
 if (GENERATE_TESTS)
@@ -48,6 +63,11 @@ if (GENERATE_TESTS)
         target_compile_options(test_obfuscated_freestanding PRIVATE /Zc:threadSafeInit-)
     endif()
     set_target_properties(test_obfuscated_freestanding PROPERTIES SUFFIX ".out")
+
+    if (GENERATE_DEMO)
+        add_test(NAME demo COMMAND demo)
+        add_test(NAME demo_freestanding COMMAND demo_freestanding)
+    endif()
 endif()
 
 # Bloat test

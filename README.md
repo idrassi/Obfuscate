@@ -34,6 +34,32 @@ For CRT-free or freestanding builds, define `AY_OBFUSCATE_FREESTANDING` before i
 #include "obfuscate.h"
 ```
 
+## Demo Program
+The repository includes a self-checking demo program in `demo.cpp`. It exercises:
+* default `AY_OBFUSCATE` usage and runtime state transitions
+* `AY_OBFUSCATE_KEY`
+* direct `ay::make_obfuscator` / `ay::obfuscated_data` usage
+* `data()` and `size()` for non-null-terminated buffers
+* global, local, and temporary contexts
+* wide-character literals
+* threaded local-copy usage and locked shared-reference usage
+
+Build the normal demo target:
+```sh
+cmake -S . -B build -DGENERATE_DEMO=ON
+cmake --build build --config Release --target demo
+./build/Release/demo
+```
+
+Build the freestanding demo target:
+```sh
+cmake -S . -B build -DGENERATE_DEMO=ON
+cmake --build build --config Release --target demo_freestanding
+./build/Release/demo_freestanding
+```
+
+On Windows, CMake produces `demo.exe` and `demo_freestanding.exe`. On MSVC, the freestanding demo target automatically adds `/Zc:threadSafeInit-`.
+
 For example, the following program will not store the string "Hello World" in plain text anywhere in the compiled executable.
 ```c++
 #include "obfuscate.h"
