@@ -8,6 +8,11 @@
 static_assert(ay::is_valid_key(0xf8d3481a4bc32d83ull), "expected valid key");
 static_assert(!ay::is_valid_key(0xff00000000000000ull), "expected invalid key");
 
+#if AY_OBFUSCATE_FREESTANDING
+static_assert(AY_OBFUSCATE_USE_THREAD_LOCAL == 0, "freestanding mode should disable thread_local storage");
+static_assert(AY_OBFUSCATE_ZERO_AFTER_DESTRUCTION == 0, "freestanding mode should disable destructor cleanup");
+#endif
+
 // Test AY_OBFUSCATE (main test)
 TEST(Obfuscate, AY_OBFUSCATE)
 {
@@ -47,6 +52,15 @@ TEST(Obfuscate, KeyValidation)
 {
 	ASSERT_TRUE(ay::is_valid_key(0xf8d3481a4bc32d83ull));
 	ASSERT_FALSE(ay::is_valid_key(0xff00000000000000ull));
+}
+
+TEST(Obfuscate, StorageConfiguration)
+{
+#if AY_OBFUSCATE_USE_THREAD_LOCAL
+	SUCCEED();
+#else
+	ASSERT_FALSE(AY_OBFUSCATE_USE_THREAD_LOCAL);
+#endif
 }
 
 // Test AY_OBFUSCATE_KEY

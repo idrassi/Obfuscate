@@ -14,15 +14,19 @@ following traits:
 	- Guaranteed obfuscation of string
 	The passed string is encrypted with a simple XOR cipher at compile-time to
 	prevent it being viewable in the binary image
-	- Global lifetime (per-thread)
+	- Global lifetime (per-thread by default)
 	The actual instantiation of the ay::obfuscated_data takes place inside a
-	lambda as a function level thread_local variable
+	lambda as a function level thread_local variable by default
 	- Implicitly convertible to a char*
 	This means that you can pass null-terminated strings directly into functions
 	that would normally take a char* or a const char*
 	- Raw buffer access
 	The data() and size() members can be used with non-null-terminated strings
 	or other char arrays
+	- Freestanding mode
+		Define AY_OBFUSCATE_FREESTANDING to remove thread_local and destructor
+		cleanup for CRT-free builds. On MSVC, compile the translation unit with
+		/Zc:threadSafeInit- to avoid local static initialization helpers.
 
 Example:
 const char* obfuscated_string = AY_OBFUSCATE("Hello World");
@@ -33,8 +37,48 @@ std::cout << obfuscated_string << std::endl;
 #pragma once
 #if __cplusplus >= 202002L
 	#define AY_CONSTEVAL consteval
+	#define AY_CONSTINIT constinit
 #else
 	#define AY_CONSTEVAL constexpr
+	#define AY_CONSTINIT
+#endif
+
+#ifndef AY_OBFUSCATE_FREESTANDING
+	#define AY_OBFUSCATE_FREESTANDING 0
+#endif
+
+#if AY_OBFUSCATE_FREESTANDING != 0 && AY_OBFUSCATE_FREESTANDING != 1
+	#error AY_OBFUSCATE_FREESTANDING must be defined as 0 or 1
+#endif
+
+#ifndef AY_OBFUSCATE_USE_THREAD_LOCAL
+	#if AY_OBFUSCATE_FREESTANDING
+		#define AY_OBFUSCATE_USE_THREAD_LOCAL 0
+	#else
+		#define AY_OBFUSCATE_USE_THREAD_LOCAL 1
+	#endif
+#endif
+
+#if AY_OBFUSCATE_USE_THREAD_LOCAL != 0 && AY_OBFUSCATE_USE_THREAD_LOCAL != 1
+	#error AY_OBFUSCATE_USE_THREAD_LOCAL must be defined as 0 or 1
+#endif
+
+#ifndef AY_OBFUSCATE_ZERO_AFTER_DESTRUCTION
+	#if AY_OBFUSCATE_FREESTANDING
+		#define AY_OBFUSCATE_ZERO_AFTER_DESTRUCTION 0
+	#else
+		#define AY_OBFUSCATE_ZERO_AFTER_DESTRUCTION 1
+	#endif
+#endif
+
+#if AY_OBFUSCATE_ZERO_AFTER_DESTRUCTION != 0 && AY_OBFUSCATE_ZERO_AFTER_DESTRUCTION != 1
+	#error AY_OBFUSCATE_ZERO_AFTER_DESTRUCTION must be defined as 0 or 1
+#endif
+
+#if AY_OBFUSCATE_USE_THREAD_LOCAL
+	#define AY_OBFUSCATE_STORAGE_SPEC thread_local
+#else
+	#define AY_OBFUSCATE_STORAGE_SPEC static
 #endif
 
 // Workaround for __LINE__ not being constexpr when /ZI (Edit and Continue) is enabled in Visual Studio
@@ -170,7 +214,7 @@ namespace ay
 	class obfuscated_data
 	{
 	public:
-		obfuscated_data(const obfuscator<N, KEY, CHAR_TYPE>& obfuscator)
+		constexpr obfuscated_data(const obfuscator<N, KEY, CHAR_TYPE>& obfuscator)
 		{
 			// Copy obfuscated data
 			for (size_type i = 0; i < N; i++)
@@ -179,6 +223,7 @@ namespace ay
 			}
 		}
 
+		#if AY_OBFUSCATE_ZERO_AFTER_DESTRUCTION
 		~obfuscated_data()
 		{
 			// Zero m_data to remove it from memory
@@ -187,6 +232,7 @@ namespace ay
 				m_data[i] = 0;
 			}
 		}
+		#endif
 
 		// Returns a pointer to the plain text string, decrypting it if
 		// necessary
@@ -255,16 +301,18 @@ namespace ay
 }
 
 // Obfuscates the string 'data' at compile-time and returns a reference to a
-// ay::obfuscated_data object with global lifetime per-thread that has
+// ay::obfuscated_data object with global lifetime. The storage is thread_local
+// by default and plain static in freestanding mode. The returned object has
 // functions for decrypting the string and is also implicitly convertable to a
-// char* for null-terminated strings
+// char* for null-terminated strings.
 #define AY_OBFUSCATE(data) AY_OBFUSCATE_KEY(data, AY_OBFUSCATE_DEFAULT_KEY)
 
 // Obfuscates the string 'data' with 'key' at compile-time and returns a
-// reference to a ay::obfuscated_data object with global lifetime per-thread
-// that has functions for decrypting the string and is also implicitly
-// convertable to a char* for null-terminated strings. 'key' must have at least
-// one bit set in each byte.
+// reference to a ay::obfuscated_data object with global lifetime. The storage
+// is thread_local by default and plain static in freestanding mode. The
+// returned object has functions for decrypting the string and is also
+// implicitly convertable to a char* for null-terminated strings. 'key' must
+// have at least one bit set in each byte.
 #define AY_OBFUSCATE_KEY(data, key) \
 	[]() -> ay::obfuscated_data<sizeof(data)/sizeof(data[0]), key, ay::char_type<decltype(*data)>>& { \
 		static_assert(sizeof(decltype(key)) == sizeof(ay::key_type), "key must be a 64 bit value"); \
@@ -272,7 +320,7 @@ namespace ay
 		using char_type = ay::char_type<decltype(*data)>; \
 		constexpr auto n = sizeof(data)/sizeof(data[0]); \
 		constexpr auto obfuscator = ay::make_obfuscator<n, key, char_type>(data); \
-		thread_local auto obfuscated_data = ay::obfuscated_data<n, key, char_type>(obfuscator); \
+		AY_OBFUSCATE_STORAGE_SPEC AY_CONSTINIT auto obfuscated_data = ay::obfuscated_data<n, key, char_type>(obfuscator); \
 		return obfuscated_data; \
 	}()
 

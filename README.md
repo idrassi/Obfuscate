@@ -19,13 +19,20 @@ This header-only library seeks to make it difficult (but not impossible) for emb
 
 ### Technical features
 * _Guaranteed compile-time obfuscation_ - the string is compiled with a constexpr expression.
-* _Global lifetime (per-thread)_ - the obfuscated string is stored in a thread local variable in a unique lambda.
+* _Global lifetime_ - stored in a unique lambda with `thread_local` storage by default, or `static` storage in freestanding mode.
 * _Implicitly convertible to a char*_ - easy to integrate into existing codebases.
 * _Deterministic 64-bit key by default_ - generated from the call site line number.
 
 By simply wrapping your string literal `"My String"` with `AY_OBFUSCATE("My String")` it will be encrypted at compile time with a 64 bit key derived from the call site and stored in an `ay::obfuscated_data` object which you can manipulate at runtime. For convenience it is also implicitly convertable to a `char*`.
 
 If you use `AY_OBFUSCATE_KEY`, the supplied key must have at least one set bit in each byte. This avoids leaving parts of the string unobfuscated.
+
+For CRT-free or freestanding builds, define `AY_OBFUSCATE_FREESTANDING` before including the header. This disables `thread_local` storage and destructor-based zeroing so MSVC does not emit TLS teardown dependencies for this library. On MSVC, compile the translation unit with `/Zc:threadSafeInit-` as well to avoid local static initialization helpers.
+
+```c++
+#define AY_OBFUSCATE_FREESTANDING 1
+#include "obfuscate.h"
+```
 
 For example, the following program will not store the string "Hello World" in plain text anywhere in the compiled executable.
 ```c++
@@ -58,7 +65,7 @@ std::string value(data, data + buffer.size());
 ```
 
 ### Thread safety
-This library can be used in a multi-threaded environment only if `AY_OBFUSCATE` is used in a local context per thread. This is because the obfuscated string is internally stored with `thread_local` storage. The following usage is supported:
+By default, this library can be used in a multi-threaded environment only if `AY_OBFUSCATE` is used in a local context per thread. This is because the obfuscated string is internally stored with `thread_local` storage. The following usage is supported:
 
 ```c++
 void fun()
@@ -103,6 +110,10 @@ int main()
     return 0;
 }
 ```
+
+When `AY_OBFUSCATE_USE_THREAD_LOCAL` is `0` (including `AY_OBFUSCATE_FREESTANDING=1`), each call site uses shared `static` storage instead. In that mode, all threads see the same backing buffer for a given macro expansion, so external synchronization is required around every concurrent use.
+
+Freestanding mode also disables destructor-based zeroing to avoid CRT teardown hooks. If you rely on the destructor to scrub process-exit memory, do not use freestanding mode.
 
 ## Binary file size overhead
 This does come at a small cost. In a very naive login program, which obfuscates two strings (username and password) the following binary file bloat exists.

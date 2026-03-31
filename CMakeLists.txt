@@ -30,8 +30,24 @@ if (GENERATE_TESTS)
 
     add_test(NAME test_unit COMMAND test_unit)
 
+    add_executable(test_unit_freestanding obfuscate.h test_unit.cpp)
+    target_link_libraries(test_unit_freestanding gtest_main)
+    target_compile_definitions(test_unit_freestanding PRIVATE AY_OBFUSCATE_FREESTANDING=1)
+    if (MSVC)
+        target_compile_options(test_unit_freestanding PRIVATE /Zc:threadSafeInit-)
+    endif()
+
+    add_test(NAME test_unit_freestanding COMMAND test_unit_freestanding)
+
     add_executable(test_obfuscated obfuscate.h test_obfuscated.cpp)
     set_target_properties(test_obfuscated PROPERTIES SUFFIX ".out")
+
+    add_executable(test_obfuscated_freestanding obfuscate.h test_obfuscated.cpp)
+    target_compile_definitions(test_obfuscated_freestanding PRIVATE AY_OBFUSCATE_FREESTANDING=1)
+    if (MSVC)
+        target_compile_options(test_obfuscated_freestanding PRIVATE /Zc:threadSafeInit-)
+    endif()
+    set_target_properties(test_obfuscated_freestanding PROPERTIES SUFFIX ".out")
 endif()
 
 # Bloat test
