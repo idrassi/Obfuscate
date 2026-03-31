@@ -21,9 +21,11 @@ This header-only library seeks to make it difficult (but not impossible) for emb
 * _Guaranteed compile-time obfuscation_ - the string is compiled with a constexpr expression.
 * _Global lifetime (per-thread)_ - the obfuscated string is stored in a thread local variable in a unique lambda.
 * _Implicitly convertible to a char*_ - easy to integrate into existing codebases.
-* _Random 64-bit key_ - obfusated with a random key each time.
+* _Deterministic 64-bit key by default_ - generated from the call site line number.
 
-By simply wrapping your string literal `"My String"` with `AY_OBFUSCATE("My String")` it will be encrypted at compile time with a random 64 bit key and stored in an `ay::obfuscated_data` object which you can manipulate at runtime. For convenience it is also implicitly convertable to a `char*`.
+By simply wrapping your string literal `"My String"` with `AY_OBFUSCATE("My String")` it will be encrypted at compile time with a 64 bit key derived from the call site and stored in an `ay::obfuscated_data` object which you can manipulate at runtime. For convenience it is also implicitly convertable to a `char*`.
+
+If you use `AY_OBFUSCATE_KEY`, the supplied key must have at least one set bit in each byte. This avoids leaving parts of the string unobfuscated.
 
 For example, the following program will not store the string "Hello World" in plain text anywhere in the compiled executable.
 ```c++
@@ -44,6 +46,15 @@ const char* var = AY_OBFUSCATE("string");
 static const char* var = AY_OBFUSCATE("string");
 std::string var(AY_OBFUSCATE("string"));
 function_that_takes_char_pointer(AY_OBFUSCATE("string"));
+```
+
+For non-null-terminated buffers or fixed-width character arrays, use `data()` and `size()` instead of C string APIs:
+```c++
+constexpr auto obfuscator = ay::obfuscator<4, AY_OBFUSCATE_DEFAULT_KEY>("ABCD");
+auto buffer = ay::obfuscated_data<obfuscator.size(), obfuscator.key()>(obfuscator);
+
+auto* data = buffer.data();
+std::string value(data, data + buffer.size());
 ```
 
 ### Thread safety

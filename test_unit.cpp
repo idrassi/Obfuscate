@@ -1,8 +1,12 @@
 #include "gtest/gtest.h"
 #include "obfuscate.h"
 
+#include <cstring>
 #include <cstdio>
 #include <string>
+
+static_assert(ay::is_valid_key(0xf8d3481a4bc32d83ull), "expected valid key");
+static_assert(!ay::is_valid_key(0xff00000000000000ull), "expected invalid key");
 
 // Test AY_OBFUSCATE (main test)
 TEST(Obfuscate, AY_OBFUSCATE)
@@ -37,6 +41,12 @@ TEST(Obfuscate, AY_OBFUSCATE)
 
 	// Test comparison
 	ASSERT_TRUE(std::string("Hello World") == (char*)test);
+}
+
+TEST(Obfuscate, KeyValidation)
+{
+	ASSERT_TRUE(ay::is_valid_key(0xf8d3481a4bc32d83ull));
+	ASSERT_FALSE(ay::is_valid_key(0xff00000000000000ull));
 }
 
 // Test AY_OBFUSCATE_KEY
@@ -86,14 +96,16 @@ TEST(Obfuscate, LocalConstCharPtr)
 	puts(local2);
 }
 
-// Test non-null terminated strings
-TEST(Obfuscate, NonNullTerminatedStr)
+// Test explicit buffer access for non-null terminated strings
+TEST(Obfuscate, NonNullTerminatedBufferAccess)
 {
 	constexpr auto obfuscator = ay::obfuscator<10, AY_OBFUSCATE_DEFAULT_KEY>("1234567890");
 	auto test = ay::obfuscated_data<obfuscator.size(), obfuscator.key()>(obfuscator);
 
-	puts(test);
+	ASSERT_TRUE(test.is_encrypted());
 
-	// Test comparison
-	assert(std::string("1234567890") == (char*)test);
+	auto* data = test.data();
+	ASSERT_FALSE(test.is_encrypted());
+	ASSERT_EQ(test.size(), 10ull);
+	ASSERT_EQ(std::string(data, data + test.size()), "1234567890");
 }

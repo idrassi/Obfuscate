@@ -14,12 +14,15 @@ following traits:
 	- Guaranteed obfuscation of string
 	The passed string is encrypted with a simple XOR cipher at compile-time to
 	prevent it being viewable in the binary image
-	- Global lifetime
+	- Global lifetime (per-thread)
 	The actual instantiation of the ay::obfuscated_data takes place inside a
-	lambda as a function level static
+	lambda as a function level thread_local variable
 	- Implicitly convertible to a char*
-	This means that you can pass it directly into functions that would normally
-	take a char* or a const char*
+	This means that you can pass null-terminated strings directly into functions
+	that would normally take a char* or a const char*
+	- Raw buffer access
+	The data() and size() members can be used with non-null-terminated strings
+	or other char arrays
 
 Example:
 const char* obfuscated_string = AY_OBFUSCATE("Hello World");
@@ -96,6 +99,20 @@ namespace ay
 		key |= 0x0101010101010101ull;
 
 		return key;
+	}
+
+	// Returns true if key has at least one set bit in each byte
+	constexpr bool is_valid_key(key_type key)
+	{
+		for (size_type i = 0; i < 8; i++)
+		{
+			if (((key >> (i * 8)) & 0xFF) == 0)
+			{
+				return false;
+			}
+		}
+
+		return true;
 	}
 
 	// Obfuscates or deobfuscates data with key
@@ -175,6 +192,12 @@ namespace ay
 		// necessary
 		operator CHAR_TYPE* ()
 		{
+			return data();
+		}
+
+		// Returns a pointer to the plain text data, decrypting it if necessary
+		CHAR_TYPE* data()
+		{
 			decrypt();
 			return m_data;
 		}
@@ -205,6 +228,13 @@ namespace ay
 			return m_encrypted;
 		}
 
+		// Returns the number of elements in the stored character array.
+		// This includes the null terminator when the source array had one.
+		constexpr size_type size() const
+		{
+			return N;
+		}
+
 	private:
 
 		// Local storage for the string. Call is_encrypted() to check whether or
@@ -225,18 +255,20 @@ namespace ay
 }
 
 // Obfuscates the string 'data' at compile-time and returns a reference to a
-// ay::obfuscated_data object with global lifetime that has functions for
-// decrypting the string and is also implicitly convertable to a char*
+// ay::obfuscated_data object with global lifetime per-thread that has
+// functions for decrypting the string and is also implicitly convertable to a
+// char* for null-terminated strings
 #define AY_OBFUSCATE(data) AY_OBFUSCATE_KEY(data, AY_OBFUSCATE_DEFAULT_KEY)
 
 // Obfuscates the string 'data' with 'key' at compile-time and returns a
-// reference to a ay::obfuscated_data object with global lifetime that has
-// functions for decrypting the string and is also implicitly convertable to a
-// char*
+// reference to a ay::obfuscated_data object with global lifetime per-thread
+// that has functions for decrypting the string and is also implicitly
+// convertable to a char* for null-terminated strings. 'key' must have at least
+// one bit set in each byte.
 #define AY_OBFUSCATE_KEY(data, key) \
 	[]() -> ay::obfuscated_data<sizeof(data)/sizeof(data[0]), key, ay::char_type<decltype(*data)>>& { \
-		static_assert(sizeof(decltype(key)) == sizeof(ay::key_type), "key must be a 64 bit unsigned integer"); \
-		static_assert((key) >= (1ull << 56), "key must span all 8 bytes"); \
+		static_assert(sizeof(decltype(key)) == sizeof(ay::key_type), "key must be a 64 bit value"); \
+		static_assert(ay::is_valid_key((key)), "key must have at least one set bit in each byte"); \
 		using char_type = ay::char_type<decltype(*data)>; \
 		constexpr auto n = sizeof(data)/sizeof(data[0]); \
 		constexpr auto obfuscator = ay::make_obfuscator<n, key, char_type>(data); \
